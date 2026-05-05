@@ -15,10 +15,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const network = WalletAdapterNetwork.Mainnet;
+  const network = WalletAdapterNetwork.Devnet;
 
-  // You can also provide a custom RPC endpoint.
-  const endpoint = "your_rpc_url";
+  const endpoint = "https://api.devnet.solana.com";
 
   const wallets = useMemo(
       () => [],

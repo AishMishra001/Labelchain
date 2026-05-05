@@ -14,7 +14,7 @@ ADD COLUMN     "amount" INTEGER NOT NULL;
 -- CreateTable
 CREATE TABLE "Payouts" (
     "id" SERIAL NOT NULL,
-    "user_id" INTEGER NOT NULL,
+    "worker_id" INTEGER NOT NULL,
     "amount" INTEGER NOT NULL,
     "signature" TEXT NOT NULL,
     "status" "TxnStatus" NOT NULL,
@@ -23,4 +23,4 @@ CREATE TABLE "Payouts" (
 );
 
 -- AddForeignKey
-ALTER TABLE "Payouts" ADD CONSTRAINT "Payouts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Payouts" ADD CONSTRAINT "Payouts_worker_id_fkey" FOREIGN KEY ("worker_id") REFERENCES "Worker"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

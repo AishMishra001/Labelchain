@@ -7,23 +7,12 @@ import { TOTAL_DECIMALS, WORKER_JWT_SECRET } from "../config";
 import { getNextTask } from "../db";
 import { createSubmissionInput } from "../types";
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
-import { privateKey } from "../privateKey";
 import { decode } from "bs58";
 const connection = new Connection(process.env.RPC_URL ?? "");
 
 const TOTAL_SUBMISSIONS = 100;
 
 const prismaClient = new PrismaClient();
-
-prismaClient.$transaction(
-    async (prisma) => {
-      // Code running in a transaction...
-    },
-    {
-      maxWait: 5000, // default: 2000
-      timeout: 10000, // default: 5000
-    }
-)
 
 const router = Router();
 
@@ -34,28 +23,38 @@ router.post("/payout", workerMiddleware, async (req, res) => {
         where: { id: Number(userId) }
     })
 
-    if (!worker) {
-        return res.status(403).json({
-            message: "User not found"
+    if (!worker || worker.pending_amount <= 0) {
+        return res.status(411).json({
+            message: "User has no pending balance"
+        })
+    }
+
+    const privateKey = process.env.PRIVATE_KEY;
+    if (!privateKey) {
+        return res.status(500).json({
+            message: "Payout wallet private key not configured"
+        })
+    }
+
+    let keypair;
+    try {
+        keypair = Keypair.fromSecretKey(decode(privateKey));
+    } catch (e) {
+        return res.status(500).json({
+            message: "Invalid payout wallet private key configuration"
         })
     }
 
     const transaction = new Transaction().add(
         SystemProgram.transfer({
-            fromPubkey: new PublicKey("2KeovpYvrgpziaDsq8nbNMP4mc48VNBVXb5arbqrg9Cq"),
+            fromPubkey: keypair.publicKey,
             toPubkey: new PublicKey(worker.address),
             lamports: 1000_000_000 * worker.pending_amount / TOTAL_DECIMALS,
         })
     );
 
+    console.log(`Sending ${worker.pending_amount / TOTAL_DECIMALS} SOL from ${keypair.publicKey.toString()} to ${worker.address}`);
 
-    console.log(worker.address);
-
-    const keypair = Keypair.fromSecretKey(decode(privateKey));
-
-    // TODO: There's a double spending problem here
-    // The user can request the withdrawal multiple times
-    // Can u figure out a way to fix it?
     let signature = "";
     try {
         signature = await sendAndConfirmTransaction(
@@ -63,16 +62,16 @@ router.post("/payout", workerMiddleware, async (req, res) => {
             transaction,
             [keypair],
         );
-    
-     } catch(e) {
-        return res.json({
-            message: "Transaction failed"
+
+    } catch (e) {
+        console.error("Payout transaction failed:", e);
+        return res.status(500).json({
+            message: "Transaction failed on-chain"
         })
-     }
-    
+    }
+
     console.log(signature)
 
-    // We should add a lock here
     await prismaClient.$transaction(async tx => {
         await tx.worker.update({
             where: {
@@ -90,9 +89,9 @@ router.post("/payout", workerMiddleware, async (req, res) => {
 
         await tx.payouts.create({
             data: {
-                user_id: Number(userId),
+                worker_id: Number(userId),
                 amount: worker.pending_amount,
-                status: "Processing",
+                status: "Success",
                 signature: signature
             }
         })
@@ -102,8 +101,6 @@ router.post("/payout", workerMiddleware, async (req, res) => {
         message: "Processing payout",
         amount: worker.pending_amount
     })
-
-
 })
 
 router.get("/balance", workerMiddleware, async (req, res) => {
@@ -116,12 +113,15 @@ router.get("/balance", workerMiddleware, async (req, res) => {
         }
     })
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     res.json({
         pendingAmount: worker?.pending_amount,
-        lockedAmount: worker?.pending_amount,
+        lockedAmount: worker?.locked_amount,
     })
 })
-
 
 router.post("/submission", workerMiddleware, async (req, res) => {
     // @ts-ignore
@@ -143,7 +143,7 @@ router.post("/submission", workerMiddleware, async (req, res) => {
             const submission = await tx.submission.create({
                 data: {
                     option_id: Number(parsedBody.data.selection),
-                    worker_id: userId,
+                    worker_id: Number(userId),
                     task_id: Number(parsedBody.data.taskId),
                     amount: Number(amount)
                 }
@@ -151,7 +151,7 @@ router.post("/submission", workerMiddleware, async (req, res) => {
 
             await tx.worker.update({
                 where: {
-                    id: userId,
+                    id: Number(userId),
                 },
                 data: {
                     pending_amount: {
@@ -168,13 +168,13 @@ router.post("/submission", workerMiddleware, async (req, res) => {
             nextTask,
             amount
         })
-        
+
 
     } else {
         res.status(411).json({
             message: "Incorrect inputs"
         })
-            
+
     }
 
 })
@@ -186,25 +186,42 @@ router.get("/nextTask", workerMiddleware, async (req, res) => {
     const task = await getNextTask(Number(userId));
 
     if (!task) {
-        res.status(411).json({   
+        res.status(411).json({
             message: "No more tasks left for you to review"
         })
     } else {
-        res.json({   
+        res.json({
             task
         })
     }
 })
 
-router.post("/signin", async(req, res) => {
+router.post("/signin", async (req, res) => {
     const { publicKey, signature } = req.body;
     const message = new TextEncoder().encode("Sign into mechanical turks as a worker");
 
-    const result = nacl.sign.detached.verify(
-        message,
-        new Uint8Array(signature.data),
-        new PublicKey(publicKey).toBytes(),
-    );
+    let result;
+    try {
+        let signatureArray;
+        if (Array.isArray(signature)) {
+            signatureArray = signature;
+        } else if (signature && signature.data) {
+            signatureArray = signature.data;
+        } else if (typeof signature === 'object' && signature !== null) {
+            signatureArray = Object.values(signature);
+        } else {
+            signatureArray = [];
+        }
+        
+        result = nacl.sign.detached.verify(
+            message,
+            new Uint8Array(signatureArray),
+            new PublicKey(publicKey).toBytes(),
+        );
+    } catch (e) {
+        console.error("Signature verification error:", e);
+        result = false;
+    }
 
     if (!result) {
         return res.status(411).json({

@@ -4,39 +4,51 @@ import {
     WalletMultiButton
 } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { BACKEND_URL } from '@/utils';
 
 export const Appbar = () => {
-    const { publicKey , signMessage} = useWallet();
+    const { publicKey, signMessage } = useWallet();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     async function signAndSend() {
         if (!publicKey) {
             return;
         }
-        const message = new TextEncoder().encode("Sign into mechanical turks");
-        const signature = await signMessage?.(message);
-        console.log(signature)
-        console.log(publicKey)
-        const response = await axios.post(`${BACKEND_URL}/v1/user/signin`, {
-            signature,
-            publicKey: publicKey?.toString()
-        });
-
-        localStorage.setItem("token", response.data.token);
+        try {
+            const message = new TextEncoder().encode("Sign into mechanical turks");
+            const signature = await signMessage?.(message);
+            console.log("Signature obtained:", signature);
+            console.log("Public key:", publicKey.toString());
+            
+            const response = await axios.post(`${BACKEND_URL}/v1/user/signin`, {
+                signature,
+                publicKey: publicKey?.toString()
+            });
+            console.log("Signin response:", response.data);
+            localStorage.setItem("token", response.data.token);
+        } catch (e) {
+            console.error("Signin failed:", e);
+        }
     }
 
     useEffect(() => {
         signAndSend()
     }, [publicKey]);
 
-    return <div className="flex justify-between border-b pb-2 pt-2">
-        <div className="text-2xl pl-4 flex justify-center pt-3">
-            Turkify
-        </div>
-        <div className="text-xl pr-4 pb-2">
-            {publicKey  ? <WalletDisconnectButton /> : <WalletMultiButton />}
+    return <div className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-screen-xl mx-auto flex justify-between items-center h-16 px-4">
+            <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                LabelChain
+            </div>
+            <div className="flex items-center gap-4">
+                {mounted && (publicKey ? <WalletDisconnectButton /> : <WalletMultiButton />)}
+            </div>
         </div>
     </div>
 }

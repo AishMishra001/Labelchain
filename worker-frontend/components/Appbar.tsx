@@ -11,6 +11,11 @@ import { BACKEND_URL } from '@/utils';
 export const Appbar = () => {
     const { publicKey , signMessage} = useWallet();
     const [balance, setBalance] = useState(0);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     async function signAndSend() {
         if (!publicKey) {
@@ -34,21 +39,47 @@ export const Appbar = () => {
         signAndSend()
     }, [publicKey]);
 
-    return <div className="flex justify-between border-b pb-2 pt-2">
-        <div className="text-2xl pl-4 flex justify-center pt-2">
-            Turkify
+    if (!mounted) {
+        return <div className="flex justify-between border-b pb-2 pt-2">
+            <div className="text-2xl pl-4 flex justify-center pt-2">
+                Labelchain
+            </div>
+            <div className="text-xl pr-4 flex" >
+                {/* Skeleton or empty space to avoid layout shift */}
+            </div>
         </div>
-        <div className="text-xl pr-4 flex" >
-            <button onClick={() => {
-                axios.post(`${BACKEND_URL}/v1/worker/payout`, {
-                    
-                }, {
-                    headers: {
-                        "Authorization": localStorage.getItem("token")
-                    }
-                })
-            }} className="m-2 mr-4 text-white bg-gray-800 hover:bg-gray-900 focus:outline-none focus:ring-4 focus:ring-gray-300 font-medium rounded-full text-sm px-5 py-2.5 me-2 dark:bg-gray-800 dark:hover:bg-gray-700 dark:focus:ring-gray-700 dark:border-gray-700">Pay me out ({balance}) SOL</button>
-            {publicKey  ? <WalletDisconnectButton /> : <WalletMultiButton />}
+    }
+
+    return (
+        <div className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 h-16">
+            <div className="max-w-screen-xl mx-auto flex justify-between items-center h-full px-4">
+                <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                    LabelChain Worker
+                </div>
+                <div className="flex items-center gap-4">
+                    {publicKey && (
+                        <button 
+                            onClick={async () => {
+                                try {
+                                    await axios.post(`${BACKEND_URL}/v1/worker/payout`, {}, {
+                                        headers: { "Authorization": localStorage.getItem("token") }
+                                    });
+                                    const balanceRes = await axios.get(`${BACKEND_URL}/v1/worker/balance`, {
+                                        headers: { "Authorization": localStorage.getItem("token") }
+                                    });
+                                    setBalance(balanceRes.data.pendingAmount / 1000000); 
+                                } catch (e) {
+                                    console.error("Payout failed", e);
+                                }
+                            }} 
+                            className="text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-medium rounded-xl text-sm px-5 py-2.5 shadow-md shadow-blue-100 transition-all hover:-translate-y-0.5"
+                        >
+                            Pay me out ({balance} SOL)
+                        </button>
+                    )}
+                    {mounted && (publicKey ? <WalletDisconnectButton /> : <WalletMultiButton />)}
+                </div>
+            </div>
         </div>
-    </div>
+    );
 }

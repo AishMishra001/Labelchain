@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers["authorization"] ?? "";
+    console.log("Auth header:", authHeader);
 
     try {
         const decoded = jwt.verify(authHeader, JWT_SECRET);
@@ -16,19 +17,18 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
         } else {
             return res.status(403).json({
                 message: "You are not logged in"
-            })    
+            })
         }
-    } catch(e) {
+    } catch (e) {
         return res.status(403).json({
             message: "You are not logged in"
         })
     }
 }
 
-export function workerMiddleware(req: Request, res: Response, next: NextFunction) { 
+export function workerMiddleware(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers["authorization"] ?? "";
-
-    console.log(authHeader);
+    console.log("Worker Auth Header:", authHeader);
     try {
         const decoded = jwt.verify(authHeader, WORKER_JWT_SECRET);
         // @ts-ignore
@@ -39,9 +39,9 @@ export function workerMiddleware(req: Request, res: Response, next: NextFunction
         } else {
             return res.status(403).json({
                 message: "You are not logged in"
-            })    
+            })
         }
-    } catch(e) {
+    } catch (e) {
         return res.status(403).json({
             message: "You are not logged in"
         })

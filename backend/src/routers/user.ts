@@ -12,15 +12,15 @@ import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 const connection = new Connection(process.env.RPC_URL ?? "");
 
 const PARENT_WALLET_ADDRESS = "2KeovpYvrgpziaDsq8nbNMP4mc48VNBVXb5arbqrg9Cq";
-    
+
 const DEFAULT_TITLE = "Select the most clickable thumbnail";
 
 const s3Client = new S3Client({
     credentials: {
         accessKeyId: process.env.ACCESS_KEY_ID ?? "",
-        secretAccessKey: process.env.ACCESS_SECRET ?? "",
+        secretAccessKey: process.env.SECRET_ACCESS_KEY ?? "",
     },
-    region: "us-east-1"
+    region: process.env.AWS_REGION ?? "us-east-1"
 })
 
 const router = Router();
@@ -30,11 +30,11 @@ const prismaClient = new PrismaClient();
 
 prismaClient.$transaction(
     async (prisma) => {
-      // Code running in a transaction...
+        // Code running in a transaction...
     },
     {
-      maxWait: 5000, // default: 2000
-      timeout: 10000, // default: 5000
+        maxWait: 5000, // default: 2000
+        timeout: 10000, // default: 5000
     }
 )
 
@@ -113,7 +113,8 @@ router.post("/task", authMiddleware, async (req, res) => {
 
     if (!parseData.success) {
         return res.status(411).json({
-            message: "You've sent the wrong inputs"
+            message: "You've sent the wrong inputs",
+            details: parseData.error.errors
         })
     }
 
@@ -123,21 +124,37 @@ router.post("/task", authMiddleware, async (req, res) => {
 
     console.log(transaction);
 
-    if ((transaction?.meta?.postBalances[1] ?? 0) - (transaction?.meta?.preBalances[1] ?? 0) !== 100000000) {
+    if (!transaction) {
         return res.status(411).json({
-            message: "Transaction signature/amount incorrect"
+            message: "Transaction not found. It might not be confirmed yet."
         })
     }
 
-    if (transaction?.transaction.message.getAccountKeys().get(1)?.toString() !== PARENT_WALLET_ADDRESS) {
+    const accountKeys = transaction.transaction.message.getAccountKeys();
+    let receiverIndex = -1;
+    for (let i = 0; i < accountKeys.length; i++) {
+        if (accountKeys.get(i)?.toString() === PARENT_WALLET_ADDRESS) {
+            receiverIndex = i;
+            break;
+        }
+    }
+
+    if (receiverIndex === -1) {
         return res.status(411).json({
-            message: "Transaction sent to wrong address"
+            message: "Transaction sent to wrong address (receiver not found)"
         })
     }
 
-    if (transaction?.transaction.message.getAccountKeys().get(0)?.toString() !== user?.address) {
+    const amount = (transaction?.meta?.postBalances[receiverIndex] ?? 0) - (transaction?.meta?.preBalances[receiverIndex] ?? 0);
+    if (amount !== 100000000) {
         return res.status(411).json({
-            message: "Transaction sent to wrong address"
+            message: `Transaction signature/amount incorrect. Expected 100000000, got ${amount}. postBalances: ${transaction?.meta?.postBalances[receiverIndex]}, preBalances: ${transaction?.meta?.preBalances[receiverIndex]}`
+        })
+    }
+
+    if (accountKeys.get(0)?.toString() !== user?.address) {
+        return res.status(411).json({
+            message: "Transaction sent to wrong address (0)"
         })
     }
     // was this money paid by this user address or a different address?
@@ -179,10 +196,10 @@ router.get("/presignedUrl", authMiddleware, async (req, res) => {
     const userId = req.userId;
 
     const { url, fields } = await createPresignedPost(s3Client, {
-        Bucket: 'hkirat-cms',
+        Bucket: process.env.S3_BUCKET ?? "",
         Key: `fiver/${userId}/${Math.random()}/image.jpg`,
         Conditions: [
-          ['content-length-range', 0, 5 * 1024 * 1024] // 5 MB max
+            ['content-length-range', 0, 5 * 1024 * 1024] // 5 MB max
         ],
         Expires: 3600
     })
@@ -191,19 +208,37 @@ router.get("/presignedUrl", authMiddleware, async (req, res) => {
         preSignedUrl: url,
         fields
     })
-    
+
 })
 
-router.post("/signin", async(req, res) => {
+router.post("/signin", async (req, res) => {
     const { publicKey, signature } = req.body;
     const message = new TextEncoder().encode("Sign into mechanical turks");
 
-    const result = nacl.sign.detached.verify(
-        message,
-        new Uint8Array(signature.data),
-        new PublicKey(publicKey).toBytes(),
-    );
+    console.log("Signin request received:", { publicKey, signatureType: typeof signature, hasData: !!signature?.data });
 
+    let result;
+    try {
+        let signatureArray;
+        if (Array.isArray(signature)) {
+            signatureArray = signature;
+        } else if (signature && signature.data) {
+            signatureArray = signature.data;
+        } else if (typeof signature === 'object' && signature !== null) {
+            signatureArray = Object.values(signature);
+        } else {
+            signatureArray = [];
+        }
+        
+        result = nacl.sign.detached.verify(
+            message,
+            new Uint8Array(signatureArray),
+            new PublicKey(publicKey).toBytes(),
+        );
+    } catch (e) {
+        console.error("Signature verification error:", e);
+        result = false;
+    }
 
     if (!result) {
         return res.status(411).json({

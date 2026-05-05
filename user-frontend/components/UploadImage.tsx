@@ -13,9 +13,15 @@ export function UploadImage({ onImageAdded, image }: {
         setUploading(true);
         try {
             const file = e.target.files[0];
+            const token = localStorage.getItem("token");
+            if (!token) {
+                console.error("No token found in localStorage");
+                setUploading(false);
+                return;
+            }
             const response = await axios.get(`${BACKEND_URL}/v1/user/presignedUrl`, {
                 headers: {
-                    "Authorization": localStorage.getItem("token")
+                    "Authorization": token
                 }
             });
             const presignedUrl = response.data.preSignedUrl;
@@ -32,27 +38,51 @@ export function UploadImage({ onImageAdded, image }: {
             formData.append("file", file);
             const awsResponse = await axios.post(presignedUrl, formData);
 
-            onImageAdded(`${CLOUDFRONT_URL}/${response.data.fields["key"]}`);
+            // If CLOUDFRONT_URL is not set, use the S3 bucket URL directly as a fallback
+            const finalImageUrl = CLOUDFRONT_URL 
+                ? `${CLOUDFRONT_URL}/${response.data.fields["key"]}`
+                : `${presignedUrl}${response.data.fields["key"]}`;
+            
+            onImageAdded(finalImageUrl);
         } catch(e) {
             console.log(e)
         }
         setUploading(false);
     }
 
+    // Determine the correct preview URL
+    let previewUrl = image;
     if (image) {
-        return <img className={"p-2 w-96 rounded"} src={image} />
+        if (image.includes("d2szwvl7yo497w.cloudfront.net")) {
+            previewUrl = image.replace("d2szwvl7yo497w.cloudfront.net", CLOUDFRONT_URL.replace("https://", ""));
+        } else if (!image.startsWith("http")) {
+            previewUrl = `${CLOUDFRONT_URL}/${image}`;
+        }
     }
 
-    return <div>
-        <div className="w-40 h-40 rounded border text-2xl cursor-pointer">
-                <div className="h-full flex justify-center flex-col relative w-full">
-                    <div className="h-full flex justify-center w-full pt-16 text-4xl">
-                    {uploading ? <div className="text-sm">Loading...</div> : <>
-                        +
-                        <input className="w-full h-full bg-red-400 w-40 h-40" type="file" style={{position: "absolute", opacity: 0, top: 0, left: 0, bottom: 0, right: 0, width: "100%", height: "100%"}} onChange={onFileSelect} />
-                    </>}
+    return (
+        <div className="w-full h-full min-h-[160px] flex items-center justify-center">
+            {image ? (
+                <div className="relative w-full h-full flex items-center justify-center p-2 group">
+                    <img className="rounded-xl object-cover max-h-40 w-full" src={previewUrl} alt="Uploaded preview" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                        <span className="text-white opacity-0 group-hover:opacity-100 font-medium transition-all">Change</span>
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <div className="w-full h-full">
+                    <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer group">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <svg className="w-8 h-8 mb-3 text-gray-400 group-hover:text-blue-500 transition-colors" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
+                            </svg>
+                            <p className="mb-2 text-sm text-gray-500 group-hover:text-gray-700 transition-colors"><span className="font-semibold">Click to upload</span></p>
+                            <p className="text-xs text-gray-400">PNG, JPG or WebP</p>
+                        </div>
+                        <input id="dropzone-file" type="file" className="hidden" onChange={onFileSelect} />
+                    </label>
+                </div>
+            )}
         </div>
-    </div>
+    );
 }

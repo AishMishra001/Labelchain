@@ -1,0 +1,1 @@
+{"root":["./src/config.ts","./src/db.ts","./src/index.ts","./src/middleware.ts","./src/privateKey.ts","./src/test-s3.ts","./src/types.ts","./src/routers/user.ts","./src/routers/worker.ts"],"version":"5.9.3"}
