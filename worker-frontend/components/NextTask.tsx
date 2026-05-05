@@ -56,7 +56,7 @@ export const NextTask = () => {
                         </svg>
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">No tasks available</h3>
-                    <p className="text-gray-500">Please check back later. We're currently looking for more work for you!</p>
+                    <p className="text-gray-500">Please check back later. We&apos;re currently looking for more work for you!</p>
                 </div>
             </div>
         );

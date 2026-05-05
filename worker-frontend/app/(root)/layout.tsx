@@ -21,7 +21,7 @@ export default function RootLayout({
 
   const wallets = useMemo(
       () => [],
-      [network]
+      []
   );
 
     return (

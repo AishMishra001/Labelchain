@@ -4,12 +4,12 @@ import {
     WalletMultiButton
 } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { BACKEND_URL } from '@/utils';
 
 export const Appbar = () => {
-    const { publicKey , signMessage} = useWallet();
+    const { publicKey, signMessage } = useWallet();
     const [balance, setBalance] = useState(0);
     const [mounted, setMounted] = useState(false);
 
@@ -17,7 +17,7 @@ export const Appbar = () => {
         setMounted(true);
     }, []);
 
-    async function signAndSend() {
+    const signAndSend = useCallback(async () => {
         if (!publicKey) {
             return;
         }
@@ -33,11 +33,11 @@ export const Appbar = () => {
         setBalance(response.data.amount)
 
         localStorage.setItem("token", response.data.token);
-    }
+    }, [publicKey, signMessage]);
 
     useEffect(() => {
         signAndSend()
-    }, [publicKey]);
+    }, [publicKey, signAndSend]);
 
     if (!mounted) {
         return <div className="flex justify-between border-b pb-2 pt-2">
@@ -51,33 +51,38 @@ export const Appbar = () => {
     }
 
     return (
-        <div className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 h-16">
-            <div className="max-w-screen-xl mx-auto flex justify-between items-center h-full px-4">
-                <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                    LabelChain Worker
-                </div>
-                <div className="flex items-center gap-4">
-                    {publicKey && (
-                        <button 
-                            onClick={async () => {
-                                try {
-                                    await axios.post(`${BACKEND_URL}/v1/worker/payout`, {}, {
-                                        headers: { "Authorization": localStorage.getItem("token") }
-                                    });
-                                    const balanceRes = await axios.get(`${BACKEND_URL}/v1/worker/balance`, {
-                                        headers: { "Authorization": localStorage.getItem("token") }
-                                    });
-                                    setBalance(balanceRes.data.pendingAmount / 1000000); 
-                                } catch (e) {
-                                    console.error("Payout failed", e);
-                                }
-                            }} 
-                            className="text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-medium rounded-xl text-sm px-5 py-2.5 shadow-md shadow-blue-100 transition-all hover:-translate-y-0.5"
-                        >
-                            Pay me out ({balance} SOL)
-                        </button>
-                    )}
-                    {mounted && (publicKey ? <WalletDisconnectButton /> : <WalletMultiButton />)}
+        <div className="fixed top-0 w-full z-50">
+            <div className="bg-amber-50 text-amber-800 text-xs py-2 px-4 text-center border-b border-amber-100 font-semibold">
+                ⚠️ Please switch your wallet to <span className="underline underline-offset-2 decoration-amber-300">Solana Devnet</span> to work and earn.
+            </div>
+            <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 h-16">
+                <div className="max-w-screen-xl mx-auto flex justify-between items-center h-full px-4">
+                    <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                        LabelChain Worker
+                    </div>
+                    <div className="flex items-center gap-4">
+                        {publicKey && (
+                            <button 
+                                onClick={async () => {
+                                    try {
+                                        await axios.post(`${BACKEND_URL}/v1/worker/payout`, {}, {
+                                            headers: { "Authorization": localStorage.getItem("token") }
+                                        });
+                                        const balanceRes = await axios.get(`${BACKEND_URL}/v1/worker/balance`, {
+                                            headers: { "Authorization": localStorage.getItem("token") }
+                                        });
+                                        setBalance(balanceRes.data.pendingAmount / 1000000); 
+                                    } catch (e) {
+                                        console.error("Payout failed", e);
+                                    }
+                                }} 
+                                className="text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-medium rounded-xl text-sm px-5 py-2.5 shadow-md shadow-blue-100 transition-all hover:-translate-y-0.5"
+                            >
+                                Pay me out ({balance} SOL)
+                            </button>
+                        )}
+                        {mounted && (publicKey ? <WalletDisconnectButton /> : <WalletMultiButton />)}
+                    </div>
                 </div>
             </div>
         </div>
