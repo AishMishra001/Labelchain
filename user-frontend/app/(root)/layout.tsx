@@ -17,7 +17,8 @@ export default function RootLayout({
 }>) {
   const network = WalletAdapterNetwork.Devnet;
 
-  const endpoint = "https://api.devnet.solana.com";
+  // You can also use a custom RPC endpoint
+  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
 
   const wallets = useMemo(
       () => [],
